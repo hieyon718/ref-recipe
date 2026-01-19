@@ -1,0 +1,136 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// 1. Users (사용자)
+model User {
+  id         String   @id // UUID 또는 구글 고유 ID
+  email      String   @unique
+  nickname   String
+  recipes    Recipe[]
+
+  @@map("users")
+}
+
+// 2. Recipes (레시피 기본 정보)
+model Recipe {
+  id         Int      @id @default(autoincrement())
+  userId     String   @map("user_id")
+  title      String
+  mainImgUrl String?  @map("main_img_url")
+  videoUrl   String?  @map("video_url")
+  totalTime  Int?     @map("total_time") // 전체 예상 소요 시간 (분)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipeIngredients RecipeIngredient[]
+  steps             RecipeStep[]
+
+  @@map("recipes")
+}
+
+// 3. Ingredients (재료 마스터)
+enum IngredientCategory {
+  FOOD   // 식재료 (계란, 양파, 스팸 등)
+  SAUCE  // 소스류 (굴소스, 간장, 고추장 등)
+}
+
+model Ingredient {
+  id       Int                @id @default(autoincrement())
+  name     String             @unique // 재료명 (예: 계란, 양파, 스팸, 굴소스)
+  category IngredientCategory // 분류 (식재료 / 소스류)
+
+  recipeIngredients RecipeIngredient[]
+  stepIngredients   StepIngredient[]
+
+  @@map("ingredients")
+}
+
+// 4. Recipe_Ingredients (레시피 전체 재료 목록)
+enum AmountUnit {
+  PIECE      // 개
+  TABLESPOON // 큰술
+  TEASPOON   // 작은술
+  CUP        // 컵
+  GRAM       // g
+  ML         // ml
+  PINCH      // 약간
+}
+
+model RecipeIngredient {
+  recipeId     Int        @map("recipe_id")
+  ingredientId Int        @map("ingredient_id")
+  amount       Float      // 수량 (0.5, 1, 2 등 소수점 허용)
+  unit         AmountUnit // 단위 (개, 큰술, 작은술, 약간 등)
+
+  recipe     Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@id([recipeId, ingredientId])
+  @@map("recipe_ingredients")
+}
+
+// 5. Recipe_Steps (조리 단계 블록)
+model RecipeStep {
+  id              Int     @id @default(autoincrement())
+  recipeId        Int     @map("recipe_id")
+  stepOrder       Int     @map("step_order") // 단계 순서 (1, 2, 3...)
+  description     String  // 조리 내용
+  stepTime        Int?    @map("step_time") // 해당 단계 소요 시간 (초)
+  isTimerRequired Boolean @default(false) @map("is_timer_required")
+
+  recipe          Recipe            @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  stepIngredients StepIngredient[]
+  stepMetas       StepMetaMapping[]
+
+  @@map("recipe_steps")
+}
+
+// 6. Step_Ingredients (단계별 투입 재료)
+model StepIngredient {
+  stepId       Int @map("step_id")
+  ingredientId Int @map("ingredient_id")
+
+  step       RecipeStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@id([stepId, ingredientId])
+  @@map("step_ingredients")
+}
+
+// 7. Cooking_Meta (도구 및 방식 마스터)
+enum MetaType {
+  TOOL   // 도구 (후라이팬, 전자레인지 등)
+  METHOD // 방식 (볶기, 찌기 등)
+}
+
+model CookingMeta {
+  id   Int      @id @default(autoincrement())
+  type MetaType // 구분 ('TOOL' - 도구 / 'METHOD' - 방식)
+  name String   // 이름 (예: 후라이팬, 전자레인지, 볶기, 찌기)
+
+  stepMetas StepMetaMapping[]
+
+  @@unique([type, name])
+  @@map("cooking_meta")
+}
+
+// 8. Step_Meta_Mapping (단계별 도구 및 방식 매핑)
+model StepMetaMapping {
+  stepId Int @map("step_id")
+  metaId Int @map("meta_id")
+
+  step RecipeStep  @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  meta CookingMeta @relation(fields: [metaId], references: [id], onDelete: Cascade)
+
+  @@id([stepId, metaId])
+  @@map("step_meta_mapping")
+}
